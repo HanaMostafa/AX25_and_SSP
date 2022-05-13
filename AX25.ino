@@ -20,7 +20,9 @@ uint8 g_Received_NR = 0;
 
 uint8 g_received_address[ADDR_LEN],Control_To_SSP[236], g_control_recived[CNTRL_LEN], g_padding_recived[PADDING_LEN];
 extern uint8 g_info_reciver[SSP_FRAME_MAX_SIZE];
-extern uint8 addr[ADDR_LEN];
+extern uint8 addr[ADDR_LEN],ax_ssp_frame[dt];
+
+
 
 uint8 flag_RX_crc; /* used in the Manager function to check whether CRC is correct or not */
 uint8 flag_info = EMPTY;
@@ -80,19 +82,113 @@ uint8 AX25_getControl(frameType frameType, frameSecondaryType secondaryType,
  * parameters:
  *  *info: pointer to the global info array
  */
-void fillBuffer(uint8 *buffer, uint8 size) {
+void fillBuffer(uint16 *tx_ax_length,uint8 *layerflag,uint8 dest_to_framing,uint8 type_to_framing,uint8 *dataflag,uint8 *data,uint16 *data_length,uint8 *checkcontrol, uint8 *Tx_App_desti,uint8 *Tx_App_type,uint8 *src_to_framing)
+ {
+	Serial1.print("dkhl hena");
+uint8 i;
+uint8 source1 = 0x05;
+  uint8 source2= 0x03;
+  uint8 arr[]={0x54,0x26,0xc0,0x34,0x7};
+  /*static uint8 Data = 0;
 
-  static uint8 Data = 0;
-
-  /*currently fill buffers this way */
+  /*currently fill buffers this way
   if (flag_Status == REJECT) {
-    /* stay at same value since we want to send the same data in the frame */
+    /* stay at same value since we want to send the same data in the frame
   } else {
-    /* increment to send next frame with different data as normal */
+    /* increment to send next frame with different data as normal
     for (int i = 0; i < size; i++) {
       buffer[i] = Data++;
     }
-  }
+  } */
+if( dest_to_framing==source2){
+	for (i = 0; i < *tx_ax_length; i++) {
+		//Serial1.print("source 03");
+					SSP_to_Control_Buffer[i] = ax_ssp_frame[i];
+
+				//	Serial1.print(SSP_to_Control_Buffer[i], HEX);
+
+				}
+				//SIZE_SSP_to_Control_Buffer=Rx_length;
+
+				g_infoSize = *tx_ax_length;
+				//*ax_ssp_flag=EMPTY;
+				*layerflag=EMPTY;
+				flag_SSP_to_Control = FULL;
+				//flag_next_frame=FULL;
+}
+
+
+if(dest_to_framing==source1 && *dataflag==EMPTY&&*checkcontrol==EMPTY){
+	Serial1.print("el type");
+	Serial1.print(type_to_framing,HEX);
+if (type_to_framing==0x04){
+	Serial1.print("\nGET\n");
+	uint8 i;
+
+
+	for (i = 0; i < 5; i++) {
+	  			data[i] = arr[i];
+	  		}
+*dataflag = FULL;
+*data_length=5;
+*Tx_App_type=type_to_framing;
+*Tx_App_desti=*src_to_framing;
+*checkcontrol=FULL;
+*layerflag=EMPTY;
+//flag_next_frame=FULL;
+}
+else if (type_to_framing==0x00){
+	Serial1.print("\nPING\n");
+	uint8 i;
+
+
+	for (i = 0; i < 5; i++) {
+	  			data[i] = arr[i];
+	  		}
+*dataflag = FULL;
+*data_length=5;
+*Tx_App_type=type_to_framing;
+*Tx_App_desti=*src_to_framing;
+*checkcontrol=FULL;
+*layerflag=EMPTY;
+//flag_next_frame=FULL;
+}
+else if (type_to_framing==0x06){
+	Serial1.print("\nREAD\n");
+	uint8 i;
+
+
+	for (i = 0; i < 5; i++) {
+	  			data[i] = arr[i];
+	  		}
+*dataflag = FULL;
+*data_length=5;
+*Tx_App_type=type_to_framing;
+*Tx_App_desti=*src_to_framing;
+*checkcontrol=FULL;
+*layerflag=EMPTY;
+//flag_next_frame=FULL;
+}
+else if (type_to_framing==0x07){
+	Serial1.print("\nWRITE\n");
+
+	uint8 i;
+
+
+	for (i = 0; i < 5; i++) {
+	  			data[i] = arr[i];
+	  		}
+*dataflag = FULL;
+*data_length=5;
+*Tx_App_type=type_to_framing;
+Serial1.print(*Tx_App_type,HEX);
+*Tx_App_desti=*src_to_framing;
+*checkcontrol=FULL;
+*layerflag=EMPTY;
+//flag_next_frame=FULL;
+}
+}
+
 }
 
 /*
@@ -126,8 +222,8 @@ void AX25_Manager(uint8 *a_control) {
   uint8 Deframing_To_Control_Buffer_Copy[256];
   static uint8 state = idle;
   uint8 pollfinal = 0;
-  static uint8 VS = 0;
-  static uint8 VR = 0;
+  static uint8 VS = 0; /* holds the number of the frame to be sent */
+  static uint8 VR = 0; /* holds the number of the frame that is expected to be received */
   uint8 NS;
   uint8 NR;
   uint8 Received_NS;
@@ -146,6 +242,8 @@ void AX25_Manager(uint8 *a_control) {
   //uint8 flag_Status = ACCEPT;
   uint8 g_Recieved_NR_1;
   static uint8 flag_NS_VR; /* flag to indicate if received NS equals VR */
+
+  uint8 flag_RxFrameType; /* used when node acts as RX, indicates type of received frame (I or S) */ /*todo: hana */
 
   switch (state) {
   case idle:
@@ -189,10 +287,24 @@ void AX25_Manager(uint8 *a_control) {
       received_control = g_control_recived[0]; /* copy the received cntrol byte */
       if ((received_control & 0x01) == 0) {
 
+
+
+          /* indicate that we received an I-Frame so that after idle we go to RX state */
+          flag_RxFrameType = I;
+
+
         /* get subfield values from the control byte */
         g_Received_NR = (received_control & 0xE0) >> 5;
         Received_NS = (received_control & 0x0E) >> 1;
         PollFinal = (received_control & 0x10) >> 4;
+
+#ifdef DEBUG
+                                Serial.print("\n Received NS = ");
+                                Serial.print(Received_NS);
+                                Serial.print("\n VR = ");
+                                Serial.print(VR);
+#endif
+
 
         /* check if Received NS equals V(R) */
         if (Received_NS == VR) {
@@ -206,19 +318,54 @@ void AX25_Manager(uint8 *a_control) {
           state = RX; /* sets the state to RX in order to send REJ in this case */
           // flag_Deframing_to_Control = EMPTY; /* Discards Frame */
         }
-      }
+       } else if ((received_control & 0x03) == 0x01) {
+
+			/*todo: check this entire else if from DR. */
+			/* indicate that we received an S-Frame so that we stay in idle mode */
+			flag_RxFrameType = S;
+
+			/* get subfield values from the control byte */
+			g_Received_NR = (received_control & 0xE0) >> 5;
+			Received_PollFinal = (received_control & 0x10) >> 4;
+			Received_Sbits = (received_control & 0x0C) >> 2;
+
+			/* reset to 0 when > 7 */
+			g_Recieved_NR_1 = g_Received_NR - 1;
+			if (g_Recieved_NR_1 > 7) {
+				g_Recieved_NR_1 = 7;
+			}
+
+			/* checks if the received frame has correct order and is of ACK type (RR or RNR) */
+			if ((g_Recieved_NR_1) == VS
+					&& (Received_Sbits == RR || Received_Sbits == RNR)) {
+				//incrementStateVar(&VR);  /*todo:check from dr */
+			}
+			flag_Deframing_to_Control = EMPTY;
+		}
+     // Serial1.print("\n CHECK FLAGS\n");
+	//  Serial1.print(notMyAddress);
+	//  Serial1.print(flag_NS_VR);
+	//  Serial1.print(flag_controltossp);
+
+     // Serial1.print("\n CHECK FLAGS\n");
 
       if (notMyAddress != SET && flag_NS_VR == SET&& flag_controltossp==EMPTY) { /*continues if the address is ours and the number of frame is what is expected*/
         /* copy array to upper layer */
-    	 // Serial1.print("\n gwa management layer ezzat\n");
+    	  Serial1.print("\n gwa management layer ezzat\n");
     	 // Serial1.print(ax_rx_length,HEX);
         for (i = 0; i < SSP_FRAME_MAX_SIZE; i++) {
           Control_To_SSP[i] = g_info_reciver[i];
 		//Serial1.print(Control_To_SSP[i], HEX);
 
         }
-        flag_controltossp=FULL;
+
+if (flag_RxFrameType == I) {
+          flag_controltossp=FULL; /*todo: check if it should be done here only or below aswell (before state = idle line) */
+
         state = RX; /* sets the state to RX */
+                                } else if (flag_RxFrameType == S) {
+                                        state = idle;
+                                }
       }
     }
     break;
@@ -323,7 +470,7 @@ void AX25_Manager(uint8 *a_control) {
 
     /* Generate Required Control Byte */
     NS = VS;
-    NR = VR;
+    NR = VR+1;
     incrementStateVar(&VS);
 
     /* check on CRC flag (in de-frame function) if True make RR if False make REJ */

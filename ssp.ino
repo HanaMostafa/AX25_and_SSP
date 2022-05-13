@@ -28,67 +28,72 @@ unsigned short compute_crc16(unsigned char *data_p, unsigned char length) {
   return crc;
 }
 
-void getdata(uint8 *data, uint16 *data_length, uint8 *dataflag) {
+void getdata(uint8 *data, uint16 *data_length, uint8 *dataflag,uint8 ax_type,uint8 ax_src, uint8 *Tx_App_type, uint8 *Tx_App_desti) {
   *dataflag = EMPTY;
   uint8 i;
-  uint8 arr[information];
 
 
-  *data_length = random(0, 229);
-  for (i = 0; i < *data_length; i++) {
-    arr[i] = random(0x00, 0xff);
-  }
-
-  for (i = 0; i < *data_length; i++) {
-    data[i] = arr[i];
-
-  }
-
+  		for (i = 0; i < ax_rx_length; i++) {
+  			data[i] = ax_rx_data[i];
+  		}
+  		flag_controltossp=EMPTY;
+  		//*deframe_ax_flag=EMPTY;
+  		*data_length = ax_rx_length;
+  		*Tx_App_type=ax_type;
+  		*Tx_App_desti=ax_src;
+  		Serial1.print(*Tx_App_type,HEX);
   *dataflag = FULL;
 }
 
-void control_layer(uint8 *Tx_App_data, uint16 data_length, uint8 Tx_App_desti,
-                   uint8 *Tx_Frm_srce, uint8 Tx_App_type, uint8 *Tx_Frm_type,
+void control_layer(uint8 *Tx_App_data, uint16 data_length, uint8 *Tx_App_desti,
+                   uint8 *Tx_Frm_srce, uint8 *Tx_App_type, uint8 *Tx_Frm_type,
                    uint8 *Tx_Frm_data, uint8 *Tx_Frm_desti, uint8 *Rx_Frm_type,
                    uint8 *Rx_Frm_data, uint8 *Rx_Frm_dest, uint16 *Rx_length,
                    uint8 *dataflag, uint8 *deframeflag, uint8 *txflag, uint8 *Rx_App_data,
-                   uint8 crcflag, uint16 *tx_size, uint8 *Rx_Frm_src, uint8 *layerflag, uint8 *checkcontrol,uint8 *deframetoframeflag) {
+                   uint8 crcflag, uint16 *tx_size, uint8 *Rx_Frm_src, uint8 *layerflag, uint8 *checkcontrol,uint8 *dest_to_framing,uint8 *src_to_framing,uint8 *type_to_framing) {
 
 
   static uint8 controlflag = idle;
   static uint8 counter = 0;
-  uint8 source = 0x05;
+  uint8 source1 = 0x05;
+  uint8 source2= 0x03;
   uint8 i;
-
+ // Serial1.print(*Tx_App_type,HEX);
   if (controlflag == idle) {
     if (*dataflag == FULL  && *txflag == EMPTY) {
       Serial1.println("\n Sending  Data \n");
       Serial1.flush();
 
       controlflag = tx;
-      *Tx_Frm_srce = source;
+      *Tx_Frm_srce = source1;
 
       for (i = 0; i < data_length; i++) {
         Tx_Frm_data[i] = Tx_App_data[i];
       }
 
       *tx_size = data_length;
-      *Tx_Frm_desti = Tx_App_desti;
-      *Tx_Frm_type = Tx_App_type;
+      *Tx_Frm_desti = *Tx_App_desti;
+      *Tx_Frm_type = *Tx_App_type;
+      //Serial1.print(*Tx_App_type,HEX);
       *txflag = FULL;
       *dataflag = EMPTY;
 
 
     } else if (*deframeflag == FULL && *layerflag == EMPTY ) {
 
-      if (*Rx_Frm_dest == source) {
+      if (*Rx_Frm_dest == source1 || *Rx_Frm_dest == source2) {
         Serial1.print("\n Received Data \n");
         Serial1.flush();
         controlflag = rx;
         *layerflag = FULL;
         *deframeflag = EMPTY;
-        *deframetoframeflag=FULL;
-
+        flag_next_frame = FULL;
+        //*dataflag=EMPTY;
+       // *deframetoframeflag=FULL;
+        *dest_to_framing=*Rx_Frm_dest;
+        //Serial1.print(*dest_to_framing, HEX);
+		*src_to_framing=*Rx_Frm_src;
+		*type_to_framing=*Rx_Frm_type;
         for (i = 0; i < *Rx_length; i++) {
           Rx_App_data[i] = Rx_Frm_data[i];
 
@@ -107,16 +112,17 @@ void control_layer(uint8 *Tx_App_data, uint16 data_length, uint8 Tx_App_desti,
 
     if (*deframeflag == FULL) {
 
-      if (*Rx_Frm_dest == source && *Rx_Frm_type == 0x02) {
+      if (*Rx_Frm_dest == source1 && *Rx_Frm_type == 0x02) {
         Serial1.println("\n Respond with an ACK \n");
         Serial1.flush();
         controlflag = idle;
         *deframeflag = EMPTY;
         *checkcontrol = EMPTY;
+       // *dataflag = EMPTY;
         counter = 0;
       }
 
-      else if ((*Rx_Frm_dest == source)
+      else if ((*Rx_Frm_dest == source1)
                && (*Rx_Frm_type == 0x03 || *Rx_Frm_type == 0x13
                    || *Rx_Frm_type == 0x23)) {
         Serial1.println("\n Response with NACK \n");
@@ -139,7 +145,7 @@ void control_layer(uint8 *Tx_App_data, uint16 data_length, uint8 Tx_App_desti,
           *txflag = EMPTY;
           *checkcontrol = EMPTY;
         }
-      } else if (*Rx_Frm_dest != source) {
+      } else if (*Rx_Frm_dest != source1) {
         *deframeflag = EMPTY;
 
 
@@ -158,7 +164,7 @@ void control_layer(uint8 *Tx_App_data, uint16 data_length, uint8 Tx_App_desti,
       *Tx_Frm_type = 0x02;
       *txflag = FULL;
       controlflag = idle;
-     *layerflag = FULL;
+     //*layerflag = FULL;
     } else if (crcflag == FULL) {
       Serial1.println("\n Wrong CRC \n");
       Serial1.flush();
@@ -370,17 +376,17 @@ void ssp_deframing(uint8 *rxframe, uint8 *adddest, uint8 *addsrc, uint8 *type,
   //Serial1.print(*length);
 }
 
-void ssp_ax_deframing(uint8 *Control_To_SSP, uint8 *ax_dest, uint8 *ax_src, uint8 *ax_type,
-                   uint8 *ax_rx_data, uint16 *ax_rx_length, uint8 *deframe_ax_flag) {
+void ssp_ax_deframing(uint8 *Control_To_SSP, uint8 *ax_rx_data, uint16 *ax_rx_length,uint8 *ax_type,uint8 *ax_src) {
   uint16 i, j, d, size2, size = 1, crc, size3;
   uint8 count = 0, k, y = 0, arr[dt], datta[information + 4];
-
+  uint8 ax_dest;
+  	//static uint8 ax_type = 0;
   //Serial1.print("\n  bshof \n");
   //  for (j = 0; j < 235; j++) {
   //  Serial1.print(Control_To_SSP[j],HEX);
    // }
 
-  *ax_dest = Control_To_SSP[dest];
+  ax_dest = Control_To_SSP[dest];
   *ax_src = Control_To_SSP[src];
   *ax_type = Control_To_SSP[typ];
 
@@ -413,7 +419,7 @@ void ssp_ax_deframing(uint8 *Control_To_SSP, uint8 *ax_dest, uint8 *ax_src, uint
   size2 = size - 3;
 
   if (Control_To_SSP[fend] == 0xc0 && crc == 0x00) {
-    *ax_dest = Control_To_SSP[dest];
+    ax_dest = Control_To_SSP[dest];
     *ax_src = Control_To_SSP[src];
 
     for (i = 4; i < (size - 3); i++) {
@@ -469,32 +475,31 @@ void ssp_ax_deframing(uint8 *Control_To_SSP, uint8 *ax_dest, uint8 *ax_src, uint
   }
 
 
-  *deframe_ax_flag = FULL;
+ // *deframe_ax_flag = FULL;
   //Serial1.print(*length);
 }
 
-void ax_ssp_framing(uint8 *ax_ssp_frame, uint8 *Rx_App_data, uint8 desti, uint8 srce,
-                     uint8 typee, uint16 Rx_length, uint16 *tx_ax_length,uint8 *ax_ssp_flag) {
+void ax_ssp_framing(uint8 *ax_ssp_frame, uint8 *Rx_App_data, uint8 *desti, uint8 *srce,
+                     uint8 *typee, uint16 Rx_length, uint16 *tx_ax_length) {
 
   uint16 p, k;
   uint8 n;
   Serial1.print("\n check gwa el function el gdeda\n\n");
 
-  for (n = 0; n < Rx_length; n++) {
+  //for (n = 0; n < Rx_length; n++) {
 
-  				Serial1.print(Rx_App_data[n], HEX);
+  	//			Serial1.print(Rx_App_data[n], HEX);
+	//		}
 
-  			}
-
-  Serial1.print("\n\n\n");
+  //Serial1.print("\n\n\n");
   ax_ssp_frame[fend] = 0xc0;
 
-  ax_ssp_frame[dest] = desti;
+  ax_ssp_frame[dest] = *desti;
+  //Serial1.print(desti, HEX);
+  ax_ssp_frame[src] = *srce;
 
-  ax_ssp_frame[src] = 0x05;
 
-
-  ax_ssp_frame[typ] = typee;
+  ax_ssp_frame[typ] = *typee;
 
   uint8 f, d, count = 0, w = 0, count2 = 0, arr[dt];
   int temp = 0, temp2 = 0;
@@ -581,5 +586,5 @@ void ax_ssp_framing(uint8 *ax_ssp_frame, uint8 *Rx_App_data, uint8 desti, uint8 
   //  Serial1.flush();
 //  }
 
-  *ax_ssp_flag = FULL;
+//  *ax_ssp_flag = FULL;
 }
