@@ -75,7 +75,8 @@ void AX25_deFrame(uint8*, uint16, uint8);
 uint8 AX25_getControl(frameType frameType, frameSecondaryType secondaryType, uint8 NS, uint8 NR, uint8 pollFinal);
 void AX25_Manager(uint8 *);
 void AX25_getInfo(uint8 * info);
-void fillBuffer(uint16 *tx_ax_length,uint8 *layerflag);
+void fillBuffer(uint16 *tx_ax_length,uint8 *layerflag,uint8 dest_to_framing,uint8 type_to_framing,uint8 *dataflag,uint8 *data,uint16 *data_length,uint8 *checkcontrol,uint8 *Tx_App_desti,uint8 *Tx_App_type,uint8 *src_to_framing);
+
 
 void AX25_buildFrame_TEST(uint8 *buffer, uint8 *info, uint8 *ADDR,
     uint8 control, uint8 infoSize);

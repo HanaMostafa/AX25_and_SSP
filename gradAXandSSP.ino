@@ -44,7 +44,7 @@ uint16 data_length;
 uint8 dataflag = EMPTY;
 uint8 rxflag = EMPTY;
 uint16 ax_rx_length = 0;
-
+uint8 typee;
 void receive_frame_here() {
 	if (rxflag == EMPTY) {
 		if (Serial1.available() > 0) {
@@ -163,9 +163,10 @@ void loop() {
 	static uint8 txflag = EMPTY;
 	uint8 i;
 	static uint8 crcflag = EMPTY;
-	uint8 desti = 0x01;
+	uint8 desti;
 	uint8 srce;
-	uint8 typee = 0x02;
+uint8 ax_src;
+uint8 ax_type;
 	uint8 desti2;
 	static uint16 tx_size = 0;
 	uint8 adddest;
@@ -204,7 +205,7 @@ void loop() {
 	if (checkcontrol == EMPTY && flag_controltossp == FULL) {
 		//dataflag = EMPTY;
 
-		ssp_ax_deframing(Control_To_SSP, ax_rx_data, &ax_rx_length);
+		ssp_ax_deframing(Control_To_SSP, ax_rx_data, &ax_rx_length,&ax_type,&ax_src);
 
 		//Serial1.print("\n size w dkhal hena \n");
 		//Serial1.print(ax_rx_length, HEX);
@@ -217,14 +218,14 @@ void loop() {
 	//	deframe_ax_flag=EMPTY;
 	//	data_length = ax_rx_length;
 	//	dataflag = FULL;
-		getdata(data, &data_length, &dataflag);
+		getdata(data, &data_length, &dataflag,ax_type,ax_src,&typee,&desti);
 
 		checkcontrol = FULL;
 	}
 
 	if ((checkcontrol == FULL && txflag == EMPTY)
 			|| (checkcontrol == EMPTY && layerflag == EMPTY)) {
-		control_layer(data, data_length, desti, &srce, typee, &type2, data2,
+		control_layer(data, data_length, &desti, &srce, &typee, &type2, data2,
 				&desti2, &type, Rx_data, &adddest, &Rx_length, &dataflag,
 				&deframeflag, &txflag, layerdata, crcflag, &tx_size, &addsrc,
 				&layerflag, &checkcontrol,&dest_to_framing,&src_to_framing,&type_to_framing);
@@ -240,7 +241,7 @@ void loop() {
 	receive_frame_here();
 
 	if (rxflag == FULL && deframeflag == EMPTY) {
-
+		//Serial1.print("DEFRAME");
 		ssp_deframing(rxframe, &adddest, &addsrc, &type, Rx_data, &Rx_length,
 				&rxflag, &crcflag, &deframeflag);
 //Serial1.print("\n hana\n");
@@ -256,12 +257,12 @@ void loop() {
 //	deframetoframeflag = EMPTY;
 
 //}
-
-
+//delay(1000);
+//	Serial1.print(flag_next_frame,HEX);
 	if (flag_next_frame == FULL &&layerflag == FULL&&flag_SSP_to_Control == EMPTY) {
-
-		ax_ssp_framing(ax_ssp_frame,layerdata, dest_to_framing, src_to_framing,type_to_framing,Rx_length, &tx_ax_length);
-		fillBuffer(&tx_ax_length,&layerflag);
+		Serial1.print("DKHAL EL FUNCTION ASASN ");
+		ax_ssp_framing(ax_ssp_frame,layerdata, &dest_to_framing, &src_to_framing,&type_to_framing,Rx_length, &tx_ax_length);
+		fillBuffer(&tx_ax_length,&layerflag, dest_to_framing,type_to_framing,&dataflag,data,&data_length,&checkcontrol,&desti,&typee,&src_to_framing);
 //Serial1.print("\n el data el mafrod tro7\n\n");
 //Serial1.print(tx_ax_length);
 //Serial1.print("\n\n\n");
